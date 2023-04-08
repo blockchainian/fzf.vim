@@ -95,7 +95,7 @@ let s:layout_keys = ['window', 'up', 'down', 'left', 'right']
 let s:bin_dir = expand('<sfile>:p:h:h:h').'/bin/'
 let s:bin = {
 \ 'preview': s:bin_dir.'preview.sh',
-\ 'tags':    s:bin_dir.'tags.pl' }
+\ 'tags':    s:bin_dir.'tags.py' }
 let s:TYPE = {'dict': type({}), 'funcref': type(function('call')), 'string': type(''), 'list': type([])}
 
 let s:wide = 120
@@ -844,7 +844,7 @@ function! fzf#vim#ag_raw(command_suffix, ...)
   if !executable('ag')
     return s:warn('ag is not found')
   endif
-  return call('fzf#vim#grep', extend(['ag --nogroup --column --color '.a:command_suffix, 1], a:000))
+  return call('fzf#vim#grep', extend(['ag --nogroup --column --nocolor -p ~/.vim/agignore'.a:command_suffix, 1], a:000))
 endfunction
 
 " command (string), has_column (bool), [spec (dict)], [fullscreen (bool)]
@@ -897,7 +897,8 @@ function! s:btags_source(tag_cmds)
   elseif empty(lines)
     throw 'No tags found'
   endif
-  return map(s:align_lists(map(lines, 'split(v:val, "\t")')), 'join(v:val, "\t")')
+
+  return lines
 endfunction
 
 function! s:btags_sink(lines)
@@ -924,9 +925,10 @@ function! fzf#vim#buffer_tags(query, ...)
   let escaped = fzf#shellescape(expand('%'))
   let null = s:is_win ? 'nul' : '/dev/null'
   let sort = has('unix') && !has('win32unix') && executable('sort') ? '| sort -s -k 5' : ''
+  let format = '| '.fzf#shellescape(s:bin.tags)
   let tag_cmds = (len(args) > 1 && type(args[0]) != type({})) ? remove(args, 0) : [
-    \ printf('ctags -f - --sort=yes --excmd=number --language-force=%s %s 2> %s %s', get({ 'cpp': 'c++' }, &filetype, &filetype), escaped, null, sort),
-    \ printf('ctags -f - --sort=yes --excmd=number %s 2> %s %s', escaped, null, sort)]
+    \ printf('ctags -f - --sort=yes --excmd=number --language-force=%s %s 2> %s %s %s', get({ 'cpp': 'c++' }, &filetype, &filetype), escaped, null, sort, format),
+    \ printf('ctags -f - --sort=yes --excmd=number %s 2> %s %s %s', escaped, null, sort, format)]
   if type(tag_cmds) != type([])
     let tag_cmds = [tag_cmds]
   endif
@@ -955,9 +957,9 @@ function! s:tags_sink(lines)
     for line in a:lines[1:]
       try
         let parts   = split(line, '\t\zs')
-        let excmd   = matchstr(join(parts[2:-2], '')[:-2], '^.\{-}\ze;\?"\t')
+        let excmd   = trim(join(parts[2:-2], '')[:-2], ' ')
         let base    = fnamemodify(parts[-1], ':h')
-        let relpath = parts[1][:-2]
+        let relpath = trim(parts[1][:-2], ' ')
         let abspath = relpath =~ (s:is_win ? '^[A-Z]:\' : '^/') ? relpath : join([base, relpath], '/')
         call s:open(cmd, expand(abspath, 1))
         silent execute excmd
@@ -976,8 +978,8 @@ function! s:tags_sink(lines)
 endfunction
 
 function! fzf#vim#tags(query, ...)
-  if !executable('perl')
-    return s:warn('Tags command requires perl')
+  if !executable('python')
+    return s:warn('Tags command requires python')
   endif
   if empty(tagfiles())
     call inputsave()
@@ -988,7 +990,7 @@ function! fzf#vim#tags(query, ...)
     redraw
     if gen =~? '^y'
       call s:warn('Preparing tags')
-      call system(get(g:, 'fzf_tags_command', 'ctags -R'.(s:is_win ? ' --output-format=e-ctags' : '')))
+      call system(get(g:, 'fzf_tags_command', 'ctags -R --excmd=number'.(s:is_win ? ' --output-format=e-ctags' : '')))
       if empty(tagfiles())
         return s:warn('Failed to create tags')
       endif
@@ -1008,7 +1010,7 @@ function! fzf#vim#tags(query, ...)
   let opts = v2_limit < 0 ? ['--algo=v1'] : []
 
   return s:fzf('tags', {
-  \ 'source':  'perl '.fzf#shellescape(s:bin.tags).' '.join(map(tagfiles, 'fzf#shellescape(fnamemodify(v:val, ":p"))')),
+  \ 'source':  fzf#shellescape(s:bin.tags).' '.join(map(tagfiles, 'fzf#shellescape(fnamemodify(v:val, ":p"))')),
   \ 'sink*':   s:function('s:tags_sink'),
   \ 'options': extend(opts, ['--nth', '1..2', '-m', '-d', '\t', '--tiebreak=begin', '--prompt', 'Tags> ', '--query', a:query])}, a:000)
 endfunction
