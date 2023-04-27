@@ -844,7 +844,7 @@ function! fzf#vim#ag_raw(command_suffix, ...)
   if !executable('ag')
     return s:warn('ag is not found')
   endif
-  return call('fzf#vim#grep', extend(['ag --nogroup --column --nocolor -p ~/.vim/agignore'.a:command_suffix, 1], a:000))
+  return call('fzf#vim#grep', extend(['ag --nogroup --column --nocolor -p ~/.config/agignore'.a:command_suffix, 1], a:000))
 endfunction
 
 " command (string), has_column (bool), [spec (dict)], [fullscreen (bool)]
